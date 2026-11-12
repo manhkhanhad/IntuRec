@@ -1,0 +1,21 @@
+host avenue  gpu NVIDIA A40, 46068 MiB
+STAGE=sft REASONING=codes LAMBDA_CODE=1.0 MICRO=8 EVAL_CKPT=
+log: DLRRec/logs/sft-codes-lam_1.0.log
+[generated] generated codes vs gold: any-overlap 0.2336, exact set 0.0290
+[generated] test metrics:
+Recall  @1, 5, 10: [0.04466460938768881, 0.07130095825889232, 0.08981646905960695]
+NDCG    @1, 5, 10: [0.04466460938768881, 0.05869704317965938, 0.0646852236656525]
+[gold] test metrics:
+Recall  @1, 5, 10: [0.05976936819879811, 0.1104433977586487, 0.14536300146175085]
+NDCG    @1, 5, 10: [0.059769368198798044, 0.08524814222231801, 0.09646695907030875]
+Job ID: 335420
+Cluster: crimson
+User/Group: mk.ngohuu.2024/mk.ngohuu.2024
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 20
+CPU Utilized: 03:52:54
+CPU Efficiency: 5.00% of 3-05:40:20 core-walltime
+Job Wall-clock time: 03:53:01
+Memory Utilized: 12.70 GB
+Memory Efficiency: 19.84% of 64.00 GB (64.00 GB/node)

@@ -1,0 +1,14 @@
+host avenue  gpu NVIDIA A40, 46068 MiB
+STAGE=sft REASONING=none LAMBDA_CODE=1.0 MICRO=8 EVAL_CKPT=
+log: DLRRec/logs/sft-none-lam_1.0.log
+Job ID: 335325
+Cluster: crimson
+User/Group: mk.ngohuu.2024/mk.ngohuu.2024
+State: FAILED (exit code 1)
+Nodes: 1
+Cores per node: 20
+CPU Utilized: 00:55:30
+CPU Efficiency: 5.03% of 18:23:40 core-walltime
+Job Wall-clock time: 00:55:11
+Memory Utilized: 10.09 GB
+Memory Efficiency: 15.77% of 64.00 GB (64.00 GB/node)

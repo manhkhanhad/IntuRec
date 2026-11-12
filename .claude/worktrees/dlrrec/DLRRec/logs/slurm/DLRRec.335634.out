@@ -1,0 +1,17 @@
+host lucas  gpu NVIDIA L40S, 46068 MiB
+STAGE=test REASONING=none LAMBDA_CODE=1.0 MICRO=8 EVAL_CKPT=epoch_2
+log: DLRRec/logs/test-none-lam_1.0-epoch_2.log
+[none] test metrics:
+Recall  @1, 5, 10: [0.04693844404742569, 0.07893454604515186, 0.10021114178983272]
+NDCG    @1, 5, 10: [0.0469384440474257, 0.06344321242737898, 0.07039811180958506]
+Job ID: 335634
+Cluster: crimson
+User/Group: mk.ngohuu.2024/mk.ngohuu.2024
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 20
+CPU Utilized: 00:16:02
+CPU Efficiency: 4.97% of 05:22:20 core-walltime
+Job Wall-clock time: 00:16:07
+Memory Utilized: 1.69 GB
+Memory Efficiency: 2.64% of 64.00 GB (64.00 GB/node)

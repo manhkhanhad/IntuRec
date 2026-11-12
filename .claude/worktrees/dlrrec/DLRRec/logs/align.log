@@ -1,0 +1,32 @@
+The new embeddings will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. To disable this, use `mean_resizing=False`
+alignment examples: 66178 (859 prototypes x 20, 48998 train rows)
+epoch 1 step 100: loss 4.1610 (13s)
+epoch 1 step 200: loss 3.2484 (25s)
+epoch 1 step 300: loss 2.7253 (37s)
+epoch 1 step 400: loss 2.3298 (49s)
+epoch 1 step 500: loss 2.2012 (62s)
+epoch 1 step 600: loss 2.0657 (74s)
+epoch 1 step 700: loss 1.9861 (87s)
+epoch 1 step 800: loss 1.9123 (100s)
+epoch 1 step 900: loss 1.9219 (113s)
+epoch 1 step 1000: loss 1.8718 (125s)
+epoch 1 step 1100: loss 1.7981 (138s)
+epoch 1 step 1200: loss 1.7982 (151s)
+epoch 1 step 1300: loss 1.7784 (164s)
+epoch 1 step 1400: loss 1.7153 (177s)
+epoch 1 step 1500: loss 1.7128 (190s)
+epoch 1 step 1600: loss 1.6944 (203s)
+epoch 1 step 1700: loss 1.6665 (216s)
+epoch 1 step 1800: loss 1.6735 (230s)
+epoch 1 step 1900: loss 1.6529 (243s)
+epoch 1 step 2000: loss 1.6654 (256s)
+epoch 1: mean loss 2.0634
+The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+code 374: target 'emotional resonance: I buy music for the deep emotional connection it creates wi'
+   generated 'emotional resonance: I buy music because it speaks to my emotions and feelings.'
+code 611: target 'nostalgic rock experience: I want to relive the rock music of my youth and feel '
+   generated 'Revisiting the Past: A desire to relive the excitement and energy of a bygone er'
+code 158: target 'Celebrating Classic Sounds: I buy albums to celebrate classic sounds that evoke '
+   generated 'Celebrating Classic Sounds: I buy albums to relive the classic sounds of the pas'
+[2026-10-22 14:48:20,567] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+saved aligned model to /common/home/users/m/mk.ngohuu.2024/research/IntuRec/.claude/worktrees/dlrrec/DLRRec/checkpoints/align

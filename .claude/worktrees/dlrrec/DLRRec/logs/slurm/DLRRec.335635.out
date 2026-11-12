@@ -1,0 +1,21 @@
+host lexicon  gpu NVIDIA L40, 46068 MiB
+STAGE=test REASONING=codes LAMBDA_CODE=1.0 MICRO=8 EVAL_CKPT=epoch_2
+log: DLRRec/logs/test-codes-lam_1.0-epoch_2.log
+[generated] generated codes vs gold: any-overlap 0.2478, exact set 0.0337
+[generated] test metrics:
+Recall  @1, 5, 10: [0.040929023875263926, 0.06967679064479454, 0.0873802176384603]
+NDCG    @1, 5, 10: [0.04092902387526393, 0.055704258644875805, 0.061429305512157015]
+[gold] test metrics:
+Recall  @1, 5, 10: [0.05635861620919279, 0.09923664122137404, 0.1320448270261491]
+NDCG    @1, 5, 10: [0.056358616209192795, 0.07825293280277743, 0.08881702289660126]
+Job ID: 335635
+Cluster: crimson
+User/Group: mk.ngohuu.2024/mk.ngohuu.2024
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 20
+CPU Utilized: 00:58:38
+CPU Efficiency: 4.97% of 19:40:40 core-walltime
+Job Wall-clock time: 00:59:02
+Memory Utilized: 1.82 GB
+Memory Efficiency: 2.85% of 64.00 GB (64.00 GB/node)

@@ -1,0 +1,58 @@
+base model: /common/home/users/m/mk.ngohuu.2024/research/IntuRec/.claude/worktrees/dlrrec/DLRRec/checkpoints/align
+Epoch [1] - Start Training
+Step [10/385] - Avg Total Loss: 14.9659, Avg NTP Loss: 6.1983, Avg Code Loss: 8.7676, Current lr: 0.0001500000, Time for 10 steps: 0:01:22
+Step [20/385] - Avg Total Loss: 10.2968, Avg NTP Loss: 4.4430, Avg Code Loss: 5.8538, Current lr: 0.0003000000, Time for 10 steps: 0:01:22
+Step [30/385] - Avg Total Loss: 8.4187, Avg NTP Loss: 3.6266, Avg Code Loss: 4.7921, Current lr: 0.0002973568, Time for 10 steps: 0:01:22
+Step [40/385] - Avg Total Loss: 7.4212, Avg NTP Loss: 3.1821, Avg Code Loss: 4.2391, Current lr: 0.0002947137, Time for 10 steps: 0:01:22
+Step [50/385] - Avg Total Loss: 6.7907, Avg NTP Loss: 2.8987, Avg Code Loss: 3.8920, Current lr: 0.0002920705, Time for 10 steps: 0:01:22
+Step [60/385] - Avg Total Loss: 6.3444, Avg NTP Loss: 2.6915, Avg Code Loss: 3.6529, Current lr: 0.0002894273, Time for 10 steps: 0:01:22
+Step [70/385] - Avg Total Loss: 6.0108, Avg NTP Loss: 2.5345, Avg Code Loss: 3.4763, Current lr: 0.0002867841, Time for 10 steps: 0:01:22
+Step [80/385] - Avg Total Loss: 5.7564, Avg NTP Loss: 2.4090, Avg Code Loss: 3.3474, Current lr: 0.0002841410, Time for 10 steps: 0:01:22
+Step [90/385] - Avg Total Loss: 5.5516, Avg NTP Loss: 2.3064, Avg Code Loss: 3.2452, Current lr: 0.0002814978, Time for 10 steps: 0:01:22
+Step [100/385] - Avg Total Loss: 5.3778, Avg NTP Loss: 2.2141, Avg Code Loss: 3.1637, Current lr: 0.0002788546, Time for 10 steps: 0:01:22
+Step [110/385] - Avg Total Loss: 5.2298, Avg NTP Loss: 2.1359, Avg Code Loss: 3.0939, Current lr: 0.0002762115, Time for 10 steps: 0:01:22
+Step [120/385] - Avg Total Loss: 5.1053, Avg NTP Loss: 2.0698, Avg Code Loss: 3.0355, Current lr: 0.0002735683, Time for 10 steps: 0:01:22
+Step [130/385] - Avg Total Loss: 4.9901, Avg NTP Loss: 2.0094, Avg Code Loss: 2.9807, Current lr: 0.0002709251, Time for 10 steps: 0:01:22
+Step [140/385] - Avg Total Loss: 4.8924, Avg NTP Loss: 1.9543, Avg Code Loss: 2.9381, Current lr: 0.0002682819, Time for 10 steps: 0:01:22
+Step [150/385] - Avg Total Loss: 4.8074, Avg NTP Loss: 1.9066, Avg Code Loss: 2.9008, Current lr: 0.0002656388, Time for 10 steps: 0:01:22
+Step [160/385] - Avg Total Loss: 4.7300, Avg NTP Loss: 1.8638, Avg Code Loss: 2.8662, Current lr: 0.0002629956, Time for 10 steps: 0:01:22
+Step [170/385] - Avg Total Loss: 4.6607, Avg NTP Loss: 1.8239, Avg Code Loss: 2.8368, Current lr: 0.0002603524, Time for 10 steps: 0:01:22
+Step [180/385] - Avg Total Loss: 4.6022, Avg NTP Loss: 1.7889, Avg Code Loss: 2.8134, Current lr: 0.0002577093, Time for 10 steps: 0:01:22
+Step [190/385] - Avg Total Loss: 4.5388, Avg NTP Loss: 1.7540, Avg Code Loss: 2.7848, Current lr: 0.0002550661, Time for 10 steps: 0:01:22
+Step [200/385] - Avg Total Loss: 4.4806, Avg NTP Loss: 1.7196, Avg Code Loss: 2.7610, Current lr: 0.0002524229, Time for 10 steps: 0:01:22
+Step [210/385] - Avg Total Loss: 4.4315, Avg NTP Loss: 1.6904, Avg Code Loss: 2.7410, Current lr: 0.0002497797, Time for 10 steps: 0:01:22
+Step [220/385] - Avg Total Loss: 4.3851, Avg NTP Loss: 1.6635, Avg Code Loss: 2.7216, Current lr: 0.0002471366, Time for 10 steps: 0:01:22
+Step [230/385] - Avg Total Loss: 4.3422, Avg NTP Loss: 1.6384, Avg Code Loss: 2.7039, Current lr: 0.0002444934, Time for 10 steps: 0:01:22
+Step [240/385] - Avg Total Loss: 4.3025, Avg NTP Loss: 1.6132, Avg Code Loss: 2.6893, Current lr: 0.0002418502, Time for 10 steps: 0:01:22
+Step [250/385] - Avg Total Loss: 4.2632, Avg NTP Loss: 1.5894, Avg Code Loss: 2.6737, Current lr: 0.0002392070, Time for 10 steps: 0:01:22
+Step [260/385] - Avg Total Loss: 4.2246, Avg NTP Loss: 1.5662, Avg Code Loss: 2.6584, Current lr: 0.0002365639, Time for 10 steps: 0:01:22
+Step [270/385] - Avg Total Loss: 4.1877, Avg NTP Loss: 1.5449, Avg Code Loss: 2.6428, Current lr: 0.0002339207, Time for 10 steps: 0:01:22
+Step [280/385] - Avg Total Loss: 4.1529, Avg NTP Loss: 1.5252, Avg Code Loss: 2.6277, Current lr: 0.0002312775, Time for 10 steps: 0:01:22
+Step [290/385] - Avg Total Loss: 4.1193, Avg NTP Loss: 1.5054, Avg Code Loss: 2.6140, Current lr: 0.0002286344, Time for 10 steps: 0:01:22
+Step [300/385] - Avg Total Loss: 4.0900, Avg NTP Loss: 1.4864, Avg Code Loss: 2.6037, Current lr: 0.0002259912, Time for 10 steps: 0:01:22
+Step [310/385] - Avg Total Loss: 4.0620, Avg NTP Loss: 1.4698, Avg Code Loss: 2.5922, Current lr: 0.0002233480, Time for 10 steps: 0:01:22
+Step [320/385] - Avg Total Loss: 4.0352, Avg NTP Loss: 1.4540, Avg Code Loss: 2.5812, Current lr: 0.0002207048, Time for 10 steps: 0:01:22
+Step [330/385] - Avg Total Loss: 4.0110, Avg NTP Loss: 1.4382, Avg Code Loss: 2.5728, Current lr: 0.0002180617, Time for 10 steps: 0:01:22
+Step [340/385] - Avg Total Loss: 3.9875, Avg NTP Loss: 1.4229, Avg Code Loss: 2.5646, Current lr: 0.0002154185, Time for 10 steps: 0:01:22
+Step [350/385] - Avg Total Loss: 3.9647, Avg NTP Loss: 1.4085, Avg Code Loss: 2.5562, Current lr: 0.0002127753, Time for 10 steps: 0:01:22
+Step [360/385] - Avg Total Loss: 3.9412, Avg NTP Loss: 1.3947, Avg Code Loss: 2.5465, Current lr: 0.0002101322, Time for 10 steps: 0:01:22
+Step [370/385] - Avg Total Loss: 3.9193, Avg NTP Loss: 1.3809, Avg Code Loss: 2.5384, Current lr: 0.0002074890, Time for 10 steps: 0:01:22
+Step [380/385] - Avg Total Loss: 3.8981, Avg NTP Loss: 1.3678, Avg Code Loss: 2.5303, Current lr: 0.0002048458, Time for 10 steps: 0:01:22
+Epoch [1] - Avg Loss: 3.8911 Avg NTP Loss: 1.3631 Avg Code Loss: 2.5281
+Epoch [1] - Start Validation
+Epoch [1] - Validation (IntuRec-style, last train batch) Avg Total Loss: 3.5735 Avg NTP Loss: 0.9130 Avg Code Loss: 2.6605
+Epoch [1] - Validation Avg Total Loss: 3.2231 Avg NTP Loss: 0.9290 Avg Code Loss: 2.2941
+[2026-10-22 15:43:58,620] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Traceback (most recent call last):
+  File "/common/home/users/m/mk.ngohuu.2024/research/IntuRec/.claude/worktrees/dlrrec/DLRRec/train_sft.py", line 268, in <module>
+    main()
+  File "/common/home/users/m/mk.ngohuu.2024/research/IntuRec/.claude/worktrees/dlrrec/DLRRec/train_sft.py", line 257, in main
+    train(model, tok, args, device)
+  File "/common/home/users/m/mk.ngohuu.2024/research/IntuRec/.claude/worktrees/dlrrec/DLRRec/train_sft.py", line 150, in train
+    model.save_pretrained(out_dir); tok.save_pretrained(out_dir)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/common/home/users/m/mk.ngohuu.2024/.conda/envs/rrec/lib/python3.11/site-packages/transformers/modeling_utils.py", line 2980, in save_pretrained
+    safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+  File "/common/home/users/m/mk.ngohuu.2024/.conda/envs/rrec/lib/python3.11/site-packages/safetensors/torch.py", line 323, in save_file
+    serialize_file(
+safetensors._safetensors_rust.SafetensorError: Error while serializing: I/O error: Disk quota exceeded (os error 122)

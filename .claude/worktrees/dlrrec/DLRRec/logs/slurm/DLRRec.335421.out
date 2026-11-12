@@ -1,0 +1,17 @@
+host lexicon  gpu NVIDIA L40, 46068 MiB
+STAGE=sft REASONING=none LAMBDA_CODE=1.0 MICRO=8 EVAL_CKPT=
+log: DLRRec/logs/sft-none-lam_1.0.log
+[none] test metrics:
+Recall  @1, 5, 10: [0.05392236478804613, 0.08900438525255806, 0.10881923014455092]
+NDCG    @1, 5, 10: [0.053922364788046136, 0.07215646551508643, 0.07850440355946435]
+Job ID: 335421
+Cluster: crimson
+User/Group: mk.ngohuu.2024/mk.ngohuu.2024
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 20
+CPU Utilized: 02:26:55
+CPU Efficiency: 5.01% of 2-00:49:40 core-walltime
+Job Wall-clock time: 02:26:29
+Memory Utilized: 20.66 GB
+Memory Efficiency: 32.28% of 64.00 GB (64.00 GB/node)
