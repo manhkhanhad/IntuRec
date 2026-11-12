@@ -44,7 +44,7 @@ def parser_args():
     parser.add_argument("--cutoff_len", type=int, default=512)
 
     # Please fill in according to your configuration.
-    parser.add_argument("--output_dir", type=str, default=f"checkpoints/")
+    parser.add_argument("--output_dir", type=str, default=f"your output ckpt path")
 
     parser.add_argument("--lr", type=float, default=3e-4)
     
@@ -54,16 +54,13 @@ def parser_args():
     parser.add_argument("--length_penalty", type=float, default=1.0)
     parser.add_argument("--topk", type=int, default=10)
     parser.add_argument("--data_result_root_path", type=str, default="result_data")
-    # Optional exact folders (<root>/<dataset>/<experiment>/<run_name>); unset = original paths.
-    parser.add_argument("--ckpt_dir", type=str, default="", help="Exact checkpoint folder (overrides output_dir layout).")
-    parser.add_argument("--result_dir", type=str, default="", help="Exact result folder (overrides data_result_root_path layout).")
 
     return parser.parse_args()
 
 
 def train(model, tokenizer, train_dataset, valid_dataset, args):
     model.train()
-    output_dir = args.ckpt_dir or f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}"
+    output_dir = f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}"
         
 
     trainer = Trainer(
@@ -195,7 +192,7 @@ def eval(model, tokenizer, local_batch_data, file_local_batch_data, info_file, a
 
 def initial_model(args, device_map):
     if args.train_or_test == "test":
-        args.base_model = args.ckpt_dir or f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}"
+        args.base_model = f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}"
     else:
         args.base_model = args.base_model
 
@@ -226,11 +223,11 @@ def run():
 
     
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    # assert world_size != 1
+    assert world_size != 1
     gradient_accumulation_steps = args.train_batch_size // args.train_micro_batch_size // world_size
     args.gradient_accumulation_steps = gradient_accumulation_steps
     device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
-    args.data_result_meta_dir_path = args.result_dir or f"{args.data_result_root_path}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/{args.decode_method}"
+    args.data_result_meta_dir_path = f"{args.data_result_root_path}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/{args.decode_method}"
     os.makedirs(args.data_result_meta_dir_path, exist_ok=True)
 
     model, tokenizer = initial_model(args, device_map)

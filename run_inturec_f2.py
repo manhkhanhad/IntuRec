@@ -58,9 +58,6 @@ def parser_args():
     parser.add_argument("--length_penalty", type=float, default=1.0)
     parser.add_argument("--topk", type=int, default=10)
     parser.add_argument("--data_result_root_path", type=str, default="result_data")
-    # Optional exact folders (<root>/<dataset>/<experiment>/<run_name>); unset = original paths.
-    parser.add_argument("--ckpt_dir", type=str, default="", help="Exact checkpoint folder (overrides output_dir layout).")
-    parser.add_argument("--result_dir", type=str, default="", help="Exact result folder (overrides data_result_root_path layout).")
 
     return parser.parse_args()
 
@@ -77,7 +74,7 @@ def get_device(args):
 
 def initial_model(args, device):
     if args.train_or_test == "test":
-        args.base_model = args.ckpt_dir or f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/intuition_num_{args.intuition_num}/alpha_{args.alpha}/standard/rs_{args.reason_step}"
+        args.base_model = f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/intuition_num_{args.intuition_num}/alpha_{args.alpha}/standard/rs_{args.reason_step}"
     else:
         args.base_model = args.base_model
     tokenizer = AutoTokenizer.from_pretrained(args.base_model, trust_remote_code=True) 
@@ -223,7 +220,7 @@ def initial_dataLoader(args, tokenizer):
 
 
 def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, device, args):
-    output_dir = args.ckpt_dir or f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/intuition_num_{args.intuition_num}/alpha_{args.alpha}/rs_{args.reason_step}"
+    output_dir = f"{args.output_dir}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/intuition_num_{args.intuition_num}/alpha_{args.alpha}/rs_{args.reason_step}"
     os.makedirs(output_dir, exist_ok=True)
 
     min_valid_loss = float("inf")
@@ -315,13 +312,13 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
         with torch.no_grad():
             for step, batch in enumerate(valid_loader):
                 batch = {k: v.to(device) for k, v in batch.items()}
-                input_ids = batch["input_ids"]
-                attention_mask = batch["attention_mask"]
-                intuition_tokens = batch["intuition_tokens"]
-                random_tokens = batch["random_tokens"]
-                tgt_tokens = batch["tgt_tokens"]
-                tgt_ids = batch["tgt_ids"]
-                labels = batch["labels"]
+                input_ids = minibatch["input_ids"]
+                attention_mask = minibatch["attention_mask"]
+                intuition_tokens = minibatch["intuition_tokens"]
+                random_tokens = minibatch["random_tokens"]
+                tgt_tokens = minibatch["tgt_tokens"]
+                tgt_ids = minibatch["tgt_ids"]
+                labels = minibatch["labels"]
 
                 res = model.forward(
                     input_ids=input_ids,
@@ -345,6 +342,10 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
             min_valid_loss = avg_valid_loss
             model.save_pretrained(output_dir)
             tokenizer.save_pretrained(output_dir)
+
+        os.makedirs(f"{output_dir}/epoch_{epoch + 1}", exist_ok=True)
+        model.save_pretrained(f"{output_dir}/epoch_{epoch + 1}")
+        tokenizer.save_pretrained(f"{output_dir}/epoch_{epoch + 1}")
 
 
 @torch.no_grad()
@@ -453,7 +454,7 @@ def run():
     set_seed(args)
     device = get_device(args)
 
-    args.data_result_meta_dir_path = args.result_dir or f"{args.data_result_root_path}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/intuition_num_{args.intuition_num}/alpha_{args.alpha}/{args.decode_method}/rs_{args.reason_step}"
+    args.data_result_meta_dir_path = f"{args.data_result_root_path}/{args.dataset}/{MODEL_NAME}/lr_{args.lr}/intuition_num_{args.intuition_num}/alpha_{args.alpha}/{args.decode_method}/rs_{args.reason_step}"
     os.makedirs(args.data_result_meta_dir_path, exist_ok=True)
 
 
