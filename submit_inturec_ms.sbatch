@@ -20,11 +20,13 @@
                                 # If no paths are provided, the output file will be placed in your current working directory
 # Remove if you do not want the workload scheduler to requeue your job after preemption --requeue
 #SBATCH --requeue                   # restart from scratch if the job is preempted
-#SBATCH --constraint="l40|a100|a40|l40s"
+#SBATCH --constraint="l40|a40|l40s"      # no 40 GB A100s (Toys needs >= 48 GB)
 ################################################################
 ## EDIT AFTER THIS LINE IF YOU ARE OKAY WITH DEFAULT SETTINGS ##
 ################################################################
 
+#SBATCH --partition=researchshort                 # The partition you've been assigned
+#SBATCH --qos=research-1-qos      # What is the QOS assigned to you?
 #SBATCH --job-name=IntuRecMS     # Give the job a name
 # Multi-step IntuRec (model/IntuRecMS.py via run_inturec_ms.py): REASON_STEP thought tokens; thought 1 =
 # IntuRec's InjectNet + intuition loss (thought 1 only); thoughts 2..S by STEP_MODE (copy = IntuRecF2's
