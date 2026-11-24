@@ -2,3 +2,4 @@ data/*
 !data/*.py
 !data/*.ipynb
 run_logs/
+.claude/worktrees/
