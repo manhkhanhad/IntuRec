@@ -31,7 +31,7 @@ def parser_args():
 
 
     parser.add_argument("--data_path", type=str, default="./data")
-    parser.add_argument("--dataset", choices=["CDs_and_Vinyl", "Toys_and_Games", "Video_Games", "Musical_Instruments", "Books"], default="CDs_and_Vinyl")
+    parser.add_argument("--dataset", choices=["CDs_and_Vinyl", "Toys_and_Games", "Video_Games", "Musical_Instruments", "Books", "Steam", "Movielens"], default="CDs_and_Vinyl")
     parser.add_argument("--sample", type=int, default=-1)
 
     # Please fill in according to your configuration.

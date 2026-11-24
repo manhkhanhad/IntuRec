@@ -16,6 +16,7 @@
 # Literature-based motive selection on Toys (worktree collab-grpo-select):
 #   MODE=joint  collab/joint_reader_selector.py  (Atlas / RA-DIT marginal-likelihood reader + selector)
 #   MODE=llm    collab/llm_selector_grpo.py      (Rank-R1-style LLM setwise selector, GRPO, ranking reward)
+#   MODE=joint_k3 collab/joint_k3.py             (3-slot joint retriever + recommender, reader 364239; set COLLAB_CODE)
 #   MODE=joint NAME=joint_k4 sbatch --export=ALL collab/submit_joint_llm.sbatch
 export CODE_DIR=${CODE_DIR:-/common/home/users/m/mk.ngohuu.2024/research/IntuRec/.claude/worktrees/collab-grpo-select}
 export OUT_ROOT=${OUT_ROOT:-/common/scratch/users/m/mk.ngohuu.2024/IntuRec/checkpoints/Toys_and_Games/CollabRec_GRPO_select}
@@ -30,7 +31,13 @@ out=$OUT_ROOT/${MODE}_$NAME
 mkdir -p "$out"
 echo "host $(hostname)  gpu $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)  MODE=$MODE NAME=$NAME EXTRA=$EXTRA out=$out"
 log=$out/train.log
-if [ "$MODE" = joint ]; then
+if [ "$MODE" = joint_k3 ]; then   # needs COLLAB_CODE (recovered CollabRec code of reader 364239)
+    python -u "$CODE_DIR/collab/joint_k3.py" --out_dir "$out" $EXTRA >> "$log" 2>&1
+elif [ "$MODE" = joint_gumbel ]; then   # straight-through Gumbel-softmax top-3, real cls retriever + k=3 reader; needs COLLAB_CODE
+    python -u "$CODE_DIR/collab/joint_retriever_gumbel.py" --out_dir "$out" $EXTRA >> "$log" 2>&1
+elif [ "$MODE" = joint_retriever ]; then   # real cls retriever + k=3 reader; needs COLLAB_CODE
+    python -u "$CODE_DIR/collab/joint_retriever_k3.py" --out_dir "$out" $EXTRA >> "$log" 2>&1
+elif [ "$MODE" = joint ]; then
     python -u "$CODE_DIR/collab/joint_reader_selector.py" --out_dir "$out" $EXTRA >> "$log" 2>&1
 else
     python -u "$CODE_DIR/collab/llm_selector_grpo.py" --out_dir "$out" $EXTRA >> "$log" 2>&1

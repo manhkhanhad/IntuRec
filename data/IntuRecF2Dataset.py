@@ -63,7 +63,7 @@ class IntuRecF2Dataset(Dataset):
             self.raw_data = rng.sample(self.raw_data, sample)
         self.tokenizer = Tokenizer(tokenizer)
         self.dataset_type = dataset_type
-        self.category_dict = {"Office_Products": "office products", "Books": "books", "steam": "games", "CDs_and_Vinyl": "musics", "Toys_and_Games": "toys and games", "Video_Games": "video games", "Musical_Instruments": "music instruments", "Sports_and_Outdoors": "sports and outdoors", "Pet_Supplies": "pet supplies", "Arts_Crafts_and_Sewing": "arts products", "Movies": "movie", "yelp": "resturant"}
+        self.category_dict = {"Office_Products": "office products", "Books": "books", "steam": "games", "CDs_and_Vinyl": "musics", "Toys_and_Games": "toys and games", "Video_Games": "video games", "Musical_Instruments": "music instruments", "Sports_and_Outdoors": "sports and outdoors", "Pet_Supplies": "pet supplies", "Arts_Crafts_and_Sewing": "arts products", "Movies": "movie", "yelp": "resturant", "Steam": "games", "Movielens": "movie"}
         category = self.category_dict[dataset]
         self.category = category
         self.instructs = [

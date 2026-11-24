@@ -20,7 +20,7 @@ import sys
 import numpy as np
 import torch
 
-MAIN = "/common/home/users/m/mk.ngohuu.2024/research/IntuRec"
+MAIN = os.environ.get("COLLAB_CODE", "/common/home/users/m/mk.ngohuu.2024/research/IntuRec")  # CollabRec code to import
 sys.path.insert(0, MAIN)
 os.chdir(MAIN)  # the CollabRec code resolves ./data relative to the checkout
 from data.CollabRecDataset import CollabRecDataset  # noqa: E402
@@ -53,8 +53,8 @@ def load_reader(path, device):
     return model, tok
 
 
-def dataset(tok, dataset_name, split, support_dir):
-    return CollabRecDataset("./data", dataset_name, tok, support_dir=support_dir, support_k=2, dataset_type=split,
+def dataset(tok, dataset_name, split, support_dir, support_k=2):
+    return CollabRecDataset("./data", dataset_name, tok, support_dir=support_dir, support_k=support_k, dataset_type=split,
                             reason_step=1, seed=0, support_mode="text")
 
 
@@ -94,7 +94,8 @@ def decode(picks, out_dir, dataset_name, eval_batch_size, device, reader=READER)
     os.makedirs(out_dir, exist_ok=True)
     write_supports(os.path.join(out_dir, "supports"), dataset_name, "test", picks)
     model, tok = load_reader(reader, device)
-    ds = dataset(tok, dataset_name, "test", os.path.join(out_dir, "supports"))
+    k = picks.shape[1] if np.ndim(picks) == 2 else 2  # [n] -> [m, m]; [n, k] -> k slots as given
+    ds = dataset(tok, dataset_name, "test", os.path.join(out_dir, "supports"), support_k=k)
     info = glob.glob(f"./data/{dataset_name}/info/*.txt")[0]
     args = argparse.Namespace(topk=10, length_penalty=1.0, temperature=1.0, eval_batch_size=eval_batch_size,
                               data_result_meta_dir_path=out_dir)
