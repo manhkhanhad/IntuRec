@@ -1,6 +1,6 @@
 """Train / evaluate CollabRecF2: latent collaborative reasoning without IntuRec's intuition.
 
-Loss = NTP + beta * rationale InfoNCE. Supports and rationale targets come from
+Loss = NTP (+ beta * L_align rationale alignment, + gamma * L_support; both 0 by default = MotiveRec). Supports and rationale targets come from
 collab/build_stage2_support.py (--support_dir). Ablations: --support_k 0 (no supports,
 thought = history residual only) and --beta 0 (no rationale alignment).
 """
@@ -37,12 +37,48 @@ def parser_args():
     parser.add_argument("--sample", type=int, default=-1)
     parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-1.5B")
     parser.add_argument("--support_dir", type=str, default="./data/CDs_and_Vinyl/collab/stage2")
-    parser.add_argument("--support_k", type=int, default=10, help="0 = no supports.")
-    parser.add_argument("--beta", type=float, default=0.1, help="Weight of the rationale-alignment InfoNCE loss.")
+    parser.add_argument("--support_k", type=int, default=3, help="Supports per row; MotiveRec default 3 (2026-11-15). 0 = no supports.")
+    parser.add_argument("--beta", type=float, default=0.0,
+                        help="Weight of L_align (rationale-alignment InfoNCE). MotiveRec: 0 (NTP only); CollabRec used 0.1.")
     parser.add_argument("--aux_temperature", type=float, default=0.05)
     parser.add_argument("--support_mode", choices=["text", "emb"], default="text",
                         help="text: rationale tokens pooled by IntuRec's InjectNet; emb: projected sentence embeddings.")
+    parser.add_argument("--motive_pool", choices=["inject", "llm_mean", "llm_mean_ln"], default="inject",
+                        help="text mode: InjectNet last-token attention over token embeddings (inject), or masked "
+                             "mean of the LLM's last-layer hidden states over each motive/rationale (llm_mean).")
+    parser.add_argument("--grad_clip", type=float, default=0.0, help="Max gradient norm; 0 = no clipping.")
     parser.add_argument("--rationale_tag", type=str, default="v5")
+    parser.add_argument("--motive_corpus", type=str, default="",
+                        help="Motive corpus under data/<ds>/collab whose prototype ids index the support texts "
+                             "(e.g. motive_corpus_v6/P1000); needed by --insert_p / --motive_head_weight / --eval_motives.")
+    parser.add_argument("--insert_p", type=float, default=0.0,
+                        help="Train only: prob. that a row whose top-k misses its true motives gets them inserted (0 = off).")
+    parser.add_argument("--insert_p_start", type=float, default=-1.0,
+                        help="Curriculum: train insert prob. goes linearly per epoch from this to --insert_p "
+                             "(e.g. 1.0 -> 0 over 3 epochs: 1.0, 0.5, 0.0); <0 = off.")
+    parser.add_argument("--save_last", action="store_true",
+                        help="Save the last epoch instead of the best-valid one (curriculum: last = deployment ratio).")
+    parser.add_argument("--test_best", action="store_true",
+                        help="Train mode: after the usual last-epoch test (result/<decode>/), also reload the saved "
+                             "best-valid-NTP checkpoint and decode the test set into result/<decode>/best/.")
+    parser.add_argument("--insert_fill", choices=["pred", "similar"], default="pred",
+                        help="Fillers next to inserted true motives: retriever's non-true picks, or nearest prototypes.")
+    parser.add_argument("--motive_head_weight", type=float, default=0.0,
+                        help="LM-side motive head CE weight (true motive from the final hidden state); 0 = off.")
+    parser.add_argument("--eval_motives", choices=["top", "true", "null", "random"], default="top",
+                        help="Decode diagnostics: motives fed at decode (true = oracle, use with --eval_split valid).")
+    parser.add_argument("--eval_split", choices=["test", "valid"], default="test",
+                        help="Split decoded by --train_or_test test (valid for oracle diagnostics).")
+    parser.add_argument("--readout", choices=["inject", "gated"], default="inject",
+                        help="How the thought reads text supports: IntuRec's InjectNet, or the relevance-gated "
+                             "readout of CollabRec 356575 (selection BCE, weight --sel_weight).")
+    parser.add_argument("--sel_weight", type=float, default=1.0, help="Weight of the gated readout's selection BCE.")
+    parser.add_argument("--noisy_precision", type=float, default=-1.0,
+                        help="Noisy-oracle motives (356575; needs --motive_corpus): train/valid slots keep each true "
+                             "motive with this prob., else a top non-true prediction; test = retriever top-k. <0 = off.")
+    parser.add_argument("--noisy_precision_start", type=float, default=-1.0,
+                        help="Curriculum: train precision goes linearly per epoch from this to --noisy_precision "
+                             "(1.0 -> 0.25 over 3 epochs: 1.0, 0.625, 0.25); valid stays at --noisy_precision. <0 = off.")
     parser.add_argument("--max_rationale_len", type=int, default=64)
     parser.add_argument("--aux_negatives", type=int, default=63, help="Random train rationales per row (text mode).")
     parser.add_argument("--run_tag", type=str, default="", help="Extra checkpoint/result sub-folder, e.g. 'motive'.")
@@ -83,6 +119,22 @@ def auto_run_name(args):
     name = args.support_mode
     if args.run_tag:
         name += f"-{args.run_tag}"
+    if args.motive_pool != "inject":
+        name += f"-{args.motive_pool}"
+    if args.grad_clip > 0:
+        name += f"-clip{args.grad_clip}"
+    if args.rationale_tag != "v5":
+        name += f"-rat{args.rationale_tag}"
+    if args.insert_p > 0 or args.insert_p_start >= 0:
+        name += (f"-ins{args.insert_p_start}to{args.insert_p}" if args.insert_p_start >= 0 else f"-ins{args.insert_p}")
+        name += "sim" if args.insert_fill == "similar" else ""
+    if args.motive_head_weight > 0:
+        name += f"-mh{args.motive_head_weight}"
+    if args.noisy_precision >= 0:
+        name += "-noisy" + (f"{args.noisy_precision_start}to" if args.noisy_precision_start >= 0 else "") \
+                + f"{args.noisy_precision}"
+    if args.readout != "inject":
+        name += f"-{args.readout}{args.sel_weight}"
     if args.oracle:
         name += f"-oracle_{args.oracle}"
     if args.gamma > 0:
@@ -108,6 +160,13 @@ def initial_model(args, device):
         tokenizer.add_special_tokens({"additional_special_tokens": tokens})
         tokenizer.padding_side = "left"
         config.support_mode = args.support_mode
+        config.motive_pool = args.motive_pool
+        config.motive_head_weight = args.motive_head_weight
+        config.readout = args.readout
+        if args.motive_head_weight > 0:
+            assert args.motive_corpus, "--motive_head_weight needs --motive_corpus"
+            with open(os.path.join(args.data_path, args.dataset, "collab", args.motive_corpus, "prototypes.json")) as f:
+                config.n_motives = len(json.load(f)) + 1  # + "no motive"
         if args.support_mode == "emb":
             rationale_emb = np.load(os.path.join(args.support_dir, "rationale_emb_train.npy"), mmap_mode="r")
             config.rationale_dim = rationale_emb.shape[1]
@@ -126,6 +185,7 @@ def initial_model(args, device):
     model.beta = args.beta
     model.gamma = args.gamma
     model.aux_temperature = args.aux_temperature
+    model.sel_weight = args.sel_weight if getattr(model, "readout", "inject") == "gated" else 0.0
     return model, tokenizer
 
 
@@ -136,8 +196,23 @@ def initial_dataloaders(args, tokenizer):
                                         support_mode=args.support_mode, rationale_tag=args.rationale_tag,
                                         max_rationale_len=args.max_rationale_len, aux_negatives=args.aux_negatives,
                                         oracle=args.oracle,
-                                        sup_anchor=args.sup_anchor if args.gamma > 0 else "")
+                                        sup_anchor=args.sup_anchor if args.gamma > 0 else "",
+                                        motive_corpus=args.motive_corpus, insert_p=args.insert_p,
+                                        insert_fill=args.insert_fill,
+                                        eval_motives=args.eval_motives if split == args.eval_split else "top",
+                                        noisy_precision=args.noisy_precision,
+                                        sel_labels=args.readout == "gated")
                 for split in ("train", "valid", "test")}
+    if args.eval_split == "valid":
+        # decode the valid split (prompt only, no target tokens) in place of test
+        datasets["test"] = CollabRecDataset(args.data_path, args.dataset, tokenizer, support_dir=args.support_dir,
+                                            support_k=args.support_k, sample=args.sample, dataset_type="valid",
+                                            reason_step=args.reason_step, seed=args.seed,
+                                            support_mode=args.support_mode, rationale_tag=args.rationale_tag,
+                                            max_rationale_len=args.max_rationale_len,
+                                            aux_negatives=args.aux_negatives, oracle=args.oracle,
+                                            motive_corpus=args.motive_corpus, eval_motives=args.eval_motives,
+                                            decode_format=True)
     print(f"Train dataset sample: \n{datasets['train'].text_data[0]['all_input']}\n")
     loaders = {split: DataLoader(ds, batch_size=args.train_micro_batch_size if split == "train" else args.eval_batch_size,
                                  shuffle=split == "train", num_workers=args.num_workers, pin_memory=True)
@@ -153,8 +228,18 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
     n_steps = (len(train_loader) + accum - 1) // accum
     for epoch in range(args.nums_epoch):
         print(f"Epoch [{epoch + 1}] - Start Training", flush=True)
+        if args.insert_p_start >= 0:
+            frac = epoch / max(args.nums_epoch - 1, 1)
+            train_loader.dataset.insert_p = args.insert_p_start + frac * (args.insert_p - args.insert_p_start)
+            print(f"Epoch [{epoch + 1}] - train insert_p {train_loader.dataset.insert_p:.3f}", flush=True)
+        if args.noisy_precision >= 0 and args.noisy_precision_start >= 0:
+            frac = epoch / max(args.nums_epoch - 1, 1)
+            p = args.noisy_precision_start + frac * (args.noisy_precision - args.noisy_precision_start)
+            train_loader.dataset.noisy_precision = p
+            print(f"Epoch [{epoch + 1}] - curriculum: train noisy precision {p:.3f} "
+                  f"(valid {args.noisy_precision}, test retriever top-k)", flush=True)
         model.train()
-        totals = {"loss": [], "ntp": [], "rationale": [], "support": []}
+        totals = {"loss": [], "ntp": [], "rationale": [], "support": [], "motive": [], "selection": []}
         step = {k: 0.0 for k in totals}
         optimizer.zero_grad()
         time_start = time.time()
@@ -165,8 +250,12 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
             step["ntp"] += res.ntp_loss.item()
             step["rationale"] += res.rationale_loss.item()
             step["support"] += res.support_loss.item()
+            step["motive"] += res.motive_loss.item() if hasattr(res, "motive_loss") else 0.0
+            step["selection"] += res.selection_loss.item() if hasattr(res, "selection_loss") else 0.0
             (res.loss / accum).backward()
             if (ministep + 1) % accum == 0:
+                if args.grad_clip > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
                 optimizer.step()
                 if scheduler is not None:
                     scheduler.step()
@@ -181,6 +270,8 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
                           f"Avg NTP Loss: {np.mean(totals['ntp']):.4f}, "
                           f"Avg Rationale Loss: {np.mean(totals['rationale']):.4f}, "
                           f"Avg Support Loss: {np.mean(totals['support']):.4f}, "
+                          f"Avg Motive Loss: {np.mean(totals['motive']):.4f}, "
+                          f"Avg Selection Loss: {np.mean(totals['selection']):.4f}, "
                           f"Current lr: {scheduler.get_last_lr()[0]:.10f}, "
                           f"Time for 10 steps: {datetime.timedelta(seconds=int(duration))}", flush=True)
         print(f"Epoch [{epoch + 1}] - Avg Loss: {np.mean(totals['loss']):.4f} Avg NTP Loss: {np.mean(totals['ntp']):.4f} "
@@ -189,7 +280,8 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
 
         print(f"Epoch [{epoch + 1}] - Start Validation", flush=True)
         model.eval()
-        valid = {"loss": [], "ntp": [], "rationale": [], "support": []}
+        valid = {"loss": [], "ntp": [], "rationale": [], "support": [], "motive": [], "selection": []}
+        motive_hits, gate_true, gate_false = [], [], []
         with torch.no_grad():
             for batch in valid_loader:
                 batch = {k: v.to(device) for k, v in batch.items()}
@@ -198,6 +290,14 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
                 valid["ntp"].append(res.ntp_loss.item())
                 valid["rationale"].append(res.rationale_loss.item())
                 valid["support"].append(res.support_loss.item())
+                valid["motive"].append(res.motive_loss.item() if hasattr(res, "motive_loss") else 0.0)
+                if getattr(model, "last_motive_hits", None) is not None:
+                    motive_hits += model.last_motive_hits.tolist()
+                valid["selection"].append(res.selection_loss.item() if hasattr(res, "selection_loss") else 0.0)
+                if getattr(model, "last_gates", None) is not None and "support_is_true" in batch:
+                    is_true = batch["support_is_true"] > 0.5
+                    gate_true += model.last_gates[is_true].tolist()
+                    gate_false += model.last_gates[~is_true].tolist()
             # run_inturec_f2.py's validation loop scores the last training minibatch (it reads
             # `minibatch`, not `batch`); log the same quantity so the two logs line up.
             res = model.forward(**minibatch)
@@ -206,13 +306,23 @@ def train(model, tokenizer, train_loader, valid_loader, optimizer, scheduler, de
               f"Avg Support Loss: {res.support_loss.item():.4f}", flush=True)
         print(f"Epoch [{epoch + 1}] - Validation Avg Total Loss: {np.mean(valid['loss']):.4f} "
               f"Avg NTP Loss: {np.mean(valid['ntp']):.4f} Avg Rationale Loss: {np.mean(valid['rationale']):.4f} "
-              f"Avg Support Loss: {np.mean(valid['support']):.4f}", flush=True)
+              f"Avg Support Loss: {np.mean(valid['support']):.4f} Avg Motive Loss: {np.mean(valid['motive']):.4f}"
+              + (f" Motive head top-1 hit: {np.mean(motive_hits):.4f}" if motive_hits else "")
+              + (f" Avg Selection Loss: {np.mean(valid['selection']):.4f}" if args.readout == "gated" else ""),
+              flush=True)
+        if gate_true and gate_false:
+            from sklearn.metrics import roc_auc_score
+            t, f_ = np.array(gate_true), np.array(gate_false)
+            auc = roc_auc_score(np.r_[np.ones(len(t)), np.zeros(len(f_))], np.r_[t, f_])
+            print(f"Epoch [{epoch + 1}] - Valid gates: true {t.mean():.4f} (n {len(t)}) wrong {f_.mean():.4f} "
+                  f"(n {len(f_)}) AUC {auc:.4f}", flush=True)
         # Keep only the best checkpoint (lowest average valid NTP), overwriting the previous best.
-        if np.mean(valid["ntp"]) < min_valid_loss:
-            min_valid_loss = np.mean(valid["ntp"])
+        if np.mean(valid["ntp"]) < min_valid_loss or args.save_last:
+            min_valid_loss = min(min_valid_loss, np.mean(valid["ntp"]))
             model.save_pretrained(output_dir)
             tokenizer.save_pretrained(output_dir)
-            print(f"Epoch [{epoch + 1}] - saved best checkpoint (valid NTP {min_valid_loss:.4f}) to {output_dir}", flush=True)
+            print(f"Epoch [{epoch + 1}] - saved {'last' if args.save_last else 'best'} checkpoint "
+                  f"(valid NTP {np.mean(valid['ntp']):.4f}) to {output_dir}", flush=True)
 
 
 @torch.no_grad()
@@ -274,6 +384,8 @@ def run():
     print(f"run: {args.dataset}/{args.experiment}/{args.run_name}  checkpoints: {run_dir(args)}", flush=True)
     # Everything for a run lives in its folder: epoch_N/ checkpoints, result/<decode>/ predictions, logs.
     args.data_result_meta_dir_path = f"{run_dir(args)}/result/{args.decode_method}"
+    if args.eval_split != "test" or args.eval_motives != "top":
+        args.data_result_meta_dir_path += f"/{args.eval_split}_{args.eval_motives}"
     if args.train_or_test == "test" and args.eval_ckpt:
         args.data_result_meta_dir_path += f"/{args.eval_ckpt}"
     os.makedirs(args.data_result_meta_dir_path, exist_ok=True)
@@ -294,6 +406,18 @@ def run():
         args.length_penalty = 0.0
     path = evaluate(model, tokenizer, test_loader.dataset, info_files[0], args)
     calRecallAndNdcgFromFile(path, info_files[0], ans_col_name="tgt_item")
+
+    if args.train_or_test == "train" and args.test_best and not args.save_last:
+        # Second decode with the best-valid-NTP checkpoint saved in the run folder (valid uses retrieved motives).
+        print("Test with the saved best-valid checkpoint -> result/<decode>/best", flush=True)
+        del model
+        torch.cuda.empty_cache()
+        args.train_or_test, args.eval_ckpt = "test", ""
+        model, tokenizer = initial_model(args, device)
+        args.data_result_meta_dir_path += "/best"
+        os.makedirs(args.data_result_meta_dir_path, exist_ok=True)
+        path = evaluate(model, tokenizer, test_loader.dataset, info_files[0], args)
+        calRecallAndNdcgFromFile(path, info_files[0], ans_col_name="tgt_item")
 
 
 if __name__ == "__main__":

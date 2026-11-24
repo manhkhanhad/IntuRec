@@ -13,7 +13,8 @@ from data.IntuRecF2Dataset import Tokenizer
 CATEGORY = {"Office_Products": "office products", "Books": "books", "steam": "games", "CDs_and_Vinyl": "musics",
             "Toys_and_Games": "toys and games", "Video_Games": "video games", "Musical_Instruments": "music instruments",
             "Sports_and_Outdoors": "sports and outdoors", "Pet_Supplies": "pet supplies",
-            "Arts_Crafts_and_Sewing": "arts products", "Movies": "movie", "yelp": "resturant"}
+            "Arts_Crafts_and_Sewing": "arts products", "Movies": "movie", "yelp": "resturant",
+            "Steam": "games", "Movielens": "movie"}
 
 
 class CollabRecDataset(Dataset):
@@ -33,7 +34,9 @@ class CollabRecDataset(Dataset):
 
     def __init__(self, data_path, dataset, tokenizer, support_dir=None, support_k=10, sample=-1,
                  dataset_type="train", reason_step=1, seed=0, support_mode="emb", rationale_tag="v5",
-                 max_rationale_len=64, aux_negatives=63, oracle="", sup_anchor=""):
+                 max_rationale_len=64, aux_negatives=63, oracle="", sup_anchor="",
+                 motive_corpus="", insert_p=0.0, insert_fill="pred", eval_motives="top", decode_format=False,
+                 noisy_precision=-1.0, sel_labels=False):
         csv_files = glob.glob(os.path.join(f"{data_path}/{dataset}/{dataset_type}", f"{dataset}*.csv"))
         assert len(csv_files) == 1, f"Expected one {dataset}*.csv in {data_path}/{dataset}/{dataset_type}"
         frame = pd.read_csv(csv_files[0])
@@ -54,14 +57,21 @@ class CollabRecDataset(Dataset):
             self.support_rows = np.load(os.path.join(support_dir, f"support_rows_{dataset_type}.npy"))[:, :support_k]
         if support_dir and support_mode == "text":
             collab_dir = os.path.join(data_path, dataset, "collab")
-            self.train_rationale_tokens = self.tokenize_rationales(
-                os.path.join(collab_dir, f"rationales_facet_train_{rationale_tag}.jsonl"), max_rationale_len)
-            self.support_table = self.train_rationale_tokens
             texts_path = os.path.join(support_dir, "support_texts.json")
+            train_rat = os.path.join(collab_dir, f"rationales_facet_train_{rationale_tag}.jsonl")
+            # Steam/Movielens have no IntuRec facet rationales. With motive support texts they are only the
+            # L_collab targets (own/neg tokens, used only when beta > 0), so they may be absent.
+            has_rationales = os.path.exists(train_rat)
+            assert has_rationales or os.path.exists(texts_path), f"need {train_rat} or {texts_path}"
+            if has_rationales:
+                self.train_rationale_tokens = self.tokenize_rationales(train_rat, max_rationale_len)
+                self.support_table = self.train_rationale_tokens
             if os.path.exists(texts_path):
                 with open(texts_path, encoding="utf-8") as f:
                     self.support_table = self.tokenize_texts(json.load(f), max_rationale_len)
-            if dataset_type == "train":
+            if not has_rationales:
+                pass
+            elif dataset_type == "train":
                 self.own_rationale_tokens = self.train_rationale_tokens
             elif dataset_type == "valid":
                 self.own_rationale_tokens = self.tokenize_rationales(
@@ -72,6 +82,57 @@ class CollabRecDataset(Dataset):
             own_path = os.path.join(support_dir, f"own_rationale_{dataset_type}.npy")
             if dataset_type != "test" and os.path.exists(own_path):
                 self.own_rationale = np.load(own_path, mmap_mode="r")
+
+        # Motive insertion + LM-side motive head (reader B recipe, GRPO session 365709), on a motive corpus
+        # whose prototype ids index support_texts.json (e.g. motive_corpus_v6/P1000). support_rows = the
+        # retriever's top-k (train: cross-fitted). Train only, with prob. insert_p per access: a row whose top-k
+        # holds none of its true motives gets its true motives + fillers ("pred": the retriever's next non-true
+        # picks; "similar": the prototypes nearest its first true motive, centroid cosine), shuffled.
+        # motive_target (train/valid): the row's true motive ids as 2 slots (one repeated; none -> K = "no motive").
+        # eval_motives (valid/test decode diagnostics): top | true (true first, then top non-true) | null | random.
+        self.motive_corpus, self.insert_p, self.insert_fill = motive_corpus, insert_p, insert_fill
+        # Noisy oracle (CollabRec 356575; noisy_precision >= 0, train/valid only): each true motive is kept with
+        # prob. noisy_precision, else replaced by the retriever's highest-ranked non-true motive; remaining slots
+        # are filled with further non-true predictions; slots shuffled. Train re-drawn per access, valid fixed per
+        # row. sel_labels: emit support_is_true (slot is a true motive) for the gated readout's selection BCE.
+        self.noisy_precision, self.sel_labels, self.seed = noisy_precision, sel_labels, seed
+        self.decode_format = decode_format
+        self.true_motives = self.motive_target = None
+        if motive_corpus:
+            assert support_mode == "text" and self.support_rows is not None and not oracle
+            corpus = os.path.join(data_path, dataset, "collab", motive_corpus)
+            with open(os.path.join(corpus, f"row_motives_{dataset_type}.json"), encoding="utf-8") as f:
+                self.true_motives = json.load(f)
+            n_proto = len(self.support_table)
+            assert n_proto == len(json.load(open(os.path.join(corpus, "prototypes.json"), encoding="utf-8")))
+            self.n_motives = n_proto + 1
+            self.motive_target = np.array([(m + m)[:2] if m else [n_proto] * 2 for m in self.true_motives],
+                                          dtype=np.int64)
+            k = self.support_rows.shape[1]
+            full = np.load(os.path.join(support_dir, f"support_rows_{dataset_type}.npy"))  # ranked, >= k + 2
+            self.pred_order = full
+            if insert_fill == "similar":
+                c = np.load(os.path.join(corpus, "centroids.npy")).astype(np.float32)
+                c /= np.linalg.norm(c, axis=1, keepdims=True)
+                sim = c @ c.T
+                np.fill_diagonal(sim, -np.inf)
+                self.similar = np.argsort(-sim, axis=1)[:, :k + 2]
+            if dataset_type != "train" and eval_motives != "top":
+                null_id = n_proto
+                self.support_table = np.concatenate(
+                    [self.support_table, self.tokenize_texts(["No specific motive."], max_rationale_len)])
+                if eval_motives == "true":
+                    rows = []
+                    for r, t in enumerate(self.true_motives):
+                        t = list(dict.fromkeys(t))[:k]
+                        rows.append(t + [int(m) for m in full[r] if m not in set(t)][:k - len(t)])
+                    self.support_rows = np.array(rows, dtype=np.int64)
+                elif eval_motives == "null":
+                    self.support_rows = np.full((len(self.true_motives), k), null_id, np.int64)
+                elif eval_motives == "random":
+                    self.support_rows = np.random.default_rng(seed).integers(0, n_proto, (len(self.true_motives), k))
+                else:
+                    raise ValueError(f"unknown eval_motives {eval_motives!r}")
 
         # Oracle analysis only (text mode): the support is each row's OWN ground truth, written with
         # the target known, for every split. "own": its rationale text (k=1); "own_motive": the texts
@@ -180,7 +241,8 @@ class CollabRecDataset(Dataset):
         self.start_token = self.tokenizer.encode("<|StartPredict|>", bos=False, eos=False)
         self.end_token = self.tokenizer.encode("<|EndPredict|>", bos=False, eos=False)
         parts = [self.prompt_parts(row) for row in tqdm(self.data)]
-        if self.dataset_type == "test":
+        test_format = self.dataset_type == "test" or self.decode_format
+        if test_format:
             max_len = max(len(p1) for p1, _, _ in parts)
         else:
             max_len = max(len(p1) + len(p2) for p1, p2, _ in parts)
@@ -188,7 +250,7 @@ class CollabRecDataset(Dataset):
 
         self.data_output, self.text_data = [], []
         for row, (part1, part2, text) in zip(self.data, parts):
-            if self.dataset_type == "test":
+            if test_format:
                 ids = part1
                 labels = None
             else:
@@ -204,12 +266,40 @@ class CollabRecDataset(Dataset):
             self.text_data.append({"all_input": text + ("" if labels is None else row["tgt_item"] + "<|EndPredict|>"),
                                    "tgt_item": row["tgt_item"]})
 
+    def motive_slots(self, row):
+        """Support prototype ids for this row; train rows may get their true motives inserted (insert_p)."""
+        top = self.support_rows[row]
+        if self.true_motives is not None and self.noisy_precision >= 0 and self.dataset_type != "test" \
+                and not self.decode_format:
+            k = len(top)
+            rng = self.rng if self.dataset_type == "train" else np.random.default_rng((self.seed, row))
+            true = list(dict.fromkeys(self.true_motives[row]))[:k]
+            wrong = [int(m) for m in self.pred_order[row] if m not in set(true)]
+            slots = [t if rng.random() < self.noisy_precision else wrong.pop(0) for t in true]
+            slots += wrong[:k - len(slots)]
+            return np.array(slots, dtype=np.int64)[rng.permutation(k)]
+        if self.true_motives is None or self.dataset_type != "train" or self.insert_p <= 0:
+            return top
+        k = len(top)
+        true = list(dict.fromkeys(self.true_motives[row]))[:k]
+        if not true or set(true) & set(top.tolist()) or self.rng.random() >= self.insert_p:
+            return top
+        pool = self.similar[true[0]] if self.insert_fill == "similar" else self.pred_order[row]
+        fill = [int(m) for m in pool if m not in set(true)][:k - len(true)]
+        return np.array(true + fill, dtype=np.int64)[self.rng.permutation(k)]
+
     def __getitem__(self, idx):
         sample = dict(self.data_output[idx])
         row = self.row_ids[idx]
         if self.support_mode == "text":
             if self.support_rows is not None:
-                sample["support_tokens"] = self.support_table[self.support_rows[row]]
+                slots = self.motive_slots(row)
+                sample["support_tokens"] = self.support_table[slots]
+                if self.sel_labels and self.true_motives is not None and "labels" in sample:
+                    true = set(self.true_motives[row])
+                    sample["support_is_true"] = np.array([float(s in true) for s in slots], dtype=np.float32)
+            if self.motive_target is not None and "labels" in sample:
+                sample["motive_target"] = self.motive_target[row]
             if self.own_rationale_tokens is not None:
                 sample["own_tokens"] = self.own_rationale_tokens[row]
                 negs = self.rng.integers(0, len(self.train_rationale_tokens), self.aux_negatives)

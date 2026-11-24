@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", default="CDs_and_Vinyl")
     parser.add_argument("--data-root", type=Path, default=Path("data"))
+    parser.add_argument("--corpus", default="motive_corpus", help="corpus dir under collab/ (e.g. motive_corpus_v6/P1000)")
     parser.add_argument("--sasrec-ckpt", type=Path, default=Path(
         "/common/home/users/m/mk.ngohuu.2024/research/Verifiable-Rec/code/baselines/results/sasrec/"
         "CDs_and_Vinyl_5_2015-10-2018-11/models/SASRec/2026-09-09_00-49-25-209512.pkl"))
@@ -122,13 +123,14 @@ def main() -> None:
     torch.manual_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     collab = args.data_root / args.dataset / "collab"
-    corpus = collab / "motive_corpus"
+    corpus = collab / args.corpus
     out = corpus / "retriever" / (args.head + ("_prior" if args.prior_bias and args.head != "cls" else ""))
     out.mkdir(parents=True, exist_ok=True)
     frames = {s: load_split(find_csv(args.data_root, args.dataset, s)) for s in SPLITS}
     labels = {s: json.loads((corpus / f"row_motives_{s}.json").read_text()) for s in SPLITS}
     n_proto = len(json.loads((corpus / "prototypes.json").read_text()))
-    text_emb = np.load(corpus / "motive_text_emb.npy")
+    text_emb = np.load(corpus / "motive_text_emb.npy") if (corpus / "motive_text_emb.npy").exists() \
+        else np.load(corpus / "centroids.npy")  # v6: no canonical-text embedding; use the centroids
     text_sim = text_emb @ text_emb.T
 
     def multi_hot(ls):

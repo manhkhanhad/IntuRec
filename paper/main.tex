@@ -1,0 +1,279 @@
+% MotiveRec paper draft (v0, 2026-11-13). Venue template not chosen yet: plain article for drafting.
+% Numbers: <scratch>/IntuRec/checkpoints/<dataset>/MotiveRec_pilot/pilot_c.json and collab/RESEARCH_LOG_motiverec.md.
+% Scope decisions (author): motivation = latent geometry only (no intervention results in this paper);
+% novelty = motive grounding (mining, retrieval, integration); the two-level reader is cited as prior design.
+\documentclass[10pt,twocolumn]{article}
+\usepackage[margin=0.8in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,multirow,graphicx,xcolor}
+\usepackage[numbers]{natbib}
+\usepackage{hyperref}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\thought}{\mathbf{t}}
+\newcommand{\M}{\mathcal{M}}
+
+\title{MotiveRec: Grounding Latent Reasoning in Purchase Motives\\for LLM-based Sequential Recommendation}
+\author{\todo{authors}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Latent reasoning lets an LLM recommender ``think'' in a continuous vector before it names the next item,
+avoiding the cost and noise of generated text rationales. We find that, trained only through the
+recommendation loss, this latent thought \emph{collapses}: across two Amazon domains the thoughts of
+different users have an effective rank of 1--9, the first principal direction carries up to 99.8\% of
+their variance, and two random users' thoughts have a cosine similarity of 0.94--1.00. A thought that is
+nearly identical for every user cannot carry user-specific reasoning. We argue the cause is that nothing
+tells the latent \emph{what} to reason about, and propose \textbf{MotiveRec}, which grounds the latent
+thought in the user's \emph{purchase motive}, the reason a person buys. MotiveRec (i) mines an
+interpretable vocabulary of motive prototypes from review-grounded purchase rationales, (ii) retrieves
+the motives likely to drive a user's next purchase from the interaction history alone, and (iii) builds
+the latent thought from the retrieved motives, either from their sentence embeddings or by reading their
+text in the LLM's own token space, aligned with the user's mined rationale. Motive grounding removes the
+collapse (random-pair cosine 0.54--0.69, effective rank 9--16) \todo{and improves accuracy: main result}.
+\end{abstract}
+
+%=====================================================================
+\section{Introduction}
+LLM-based sequential recommenders cast next-item prediction as generating the title of the next item
+from a textual interaction history~\citep{bigrec,tallrec}. Explicit chain-of-thought reasoning before
+the prediction helps, but generated rationales are slow and unreliable. \emph{Latent} reasoning replaces
+them with one or a few continuous vectors written into the prompt before the answer: LatentR$^3$~\citep{r3}
+pools the LLM's hidden states into a thought vector and refines it with reinforcement learning, and
+IntuRec~\citep{inturec} builds it from retrieved candidate items (``intuitions'').
+
+These latent thoughts are supervised only by the next-item loss. We ask what they actually encode, and
+find that they collapse (Section~\ref{sec:pilot}). For both methods and both datasets, the thoughts of
+all test users lie almost on one direction: the effective rank of the thought matrix is 1.0--9.0, the
+first principal component explains 31--99.8\% of the variance, and two random users' thoughts have a
+cosine of 0.94--1.00. On Toys, R$^3$ produces one constant vector for every user. A latent that is the
+same for everyone is a learned prompt, not reasoning about the user.
+
+We attribute the collapse to a missing \emph{content} for the latent: the recommendation loss can be
+reduced by a shared, user-independent vector, so nothing pushes the thought to differ between users.
+Content-free latents (R$^3$) and item-level content (IntuRec, \emph{what} to buy) both collapse. We
+propose to give the latent a different kind of content: the \emph{reason} the user buys. Purchase
+motives, such as completing a collection, buying a gift, or loyalty to an artist or franchise, are
+interpretable, shared across users and items, and vary between users with the same history items.
+
+\textbf{MotiveRec} grounds latent reasoning in purchase motives in three steps. \emph{Motive mining}
+turns review-grounded purchase rationales of training interactions into a compact, named vocabulary of
+motive prototypes. \emph{Motive retrieval} predicts, from the history alone, which prototypes are likely
+to drive the next purchase, so no target information is used at inference. \emph{Motive integration}
+builds the latent thought from the retrieved motives, and an alignment objective ties the thought to the
+user's own mined rationale.
+
+\paragraph{Contributions.}
+\begin{itemize}
+\item We identify and measure \emph{latent collapse} in LLM recommenders with latent reasoning: the
+latent thought becomes nearly identical across users (Section~\ref{sec:pilot}).
+\item We propose MotiveRec, which grounds the latent in purchase motives through a target-free pipeline
+of motive mining, motive retrieval, and motive integration with two variants (embedding and text).
+\item We release motive vocabularies for two Amazon domains (859 and 881 named prototypes).
+\item Experiments on two datasets show that motive grounding removes the collapse \todo{and improves
+recommendation accuracy over R$^3$, IntuRec and the backbone}.
+\end{itemize}
+
+%=====================================================================
+\section{Pilot study: latent collapse}\label{sec:pilot}
+\paragraph{Setup.} We use the Amazon CDs \& Vinyl and Toys \& Games datasets with the same splits
+for all models (CDs: 49{,}251 / 6{,}157 train / test rows; Toys: 53{,}898 / 6{,}738), and the original
+released code and checkpoints of LatentR$^3$ (after supervised fine-tuning, SFT, and after RL) and
+IntuRec, all on Qwen2.5-1.5B. For every test row we take the thought vector $\thought_u\in\mathbb{R}^{d}$
+($d=1536$) that the model writes into the prompt.
+
+\paragraph{Measures.} With $T\in\mathbb{R}^{n\times d}$ the matrix of test thoughts and $\sigma_i$ the
+singular values of its centred version, we report (i) the \emph{effective rank}
+$\exp(-\sum_i p_i\log p_i)$ with $p_i=\sigma_i/\sum_j\sigma_j$~\citep{effrank}, which is $d$ for isotropic
+vectors and 1 for vectors on one line; (ii) the share of variance on the first principal component
+(PC1); and (iii) the mean cosine similarity of 2{,}000 random pairs of (uncentred) thoughts, which is near
+1 when all users receive almost the same vector.
+
+\begin{table}[t]
+\centering\small
+\caption{Geometry of test-set latent thoughts. Higher effective rank and lower pair cosine mean
+more diverse thoughts. \emph{History query}: hidden state of the fine-tuned backbone at the thought position, before the latent is formed (measured on the MotiveRec-T backbone).}
+\label{tab:collapse}
+\begin{tabular}{llccc}
+\toprule
+Data & Model & Eff.\ rank & PC1 var. & Pair cos \\
+\midrule
+\multirow{4}{*}{CDs}
+ & LatentR$^3$ (SFT) & 9.01 & 0.307 & 0.944 \\
+ & LatentR$^3$ (RL)  & 1.55 & 0.905 & 0.995 \\
+ & IntuRec           & 1.02 & 0.998 & 0.952 \\
+ & \textit{history query} & \textit{138.0} & \textit{0.140} & \textit{0.686} \\
+\midrule
+\multirow{4}{*}{Toys}
+ & LatentR$^3$ (SFT) & 2.27 & 0.631 & 1.000 \\
+ & LatentR$^3$ (RL)  & 2.30 & 0.607 & 1.000 \\
+ & IntuRec           & 1.05 & 0.992 & 0.996 \\
+ & \textit{history query} & \textit{132.0} & \textit{0.135} & \textit{0.511} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Findings.} Table~\ref{tab:collapse} shows that the latent thoughts collapse for every model
+and dataset. The pair cosine is 0.94--1.00, and on Toys both R$^3$ checkpoints map every user to the
+same vector (the remaining rank is numerical noise). The RL stage of R$^3$ makes the collapse worse on
+CDs (effective rank $9.01\to1.55$). IntuRec's thought, built from item intuitions, is almost
+one-dimensional on both datasets (PC1 $\geq 0.99$). The collapse is not forced by the backbone: the LLM's hidden state at the thought position is diverse
+(effective rank 132--138 in a fine-tuned backbone of the same size), so the user information is available
+but is not kept in the latent. \todo{measure the history query of R$^3$ / IntuRec themselves}
+
+\paragraph{Implication.} A latent that is nearly the same for all users cannot express user-specific
+reasoning. Since both a content-free latent and a latent built from candidate items collapse, we ask
+whether a latent grounded in an explicit, user-varying concept, the purchase motive, stays diverse.
+
+%=====================================================================
+\section{MotiveRec}\label{sec:method}
+\paragraph{Problem and backbone.} A user $u$ has a chronological history $H_u=(i_1,\dots,i_n)$ of item
+titles; the task is to generate the title of the next item $i_{n+1}$. Following latent-reasoning
+recommenders~\citep{r3,inturec}, the prompt contains the history followed by a reserved thought token.
+A first pass of the LLM gives the hidden state at the thought position, the \emph{history query}
+$\mathbf{h}_u\in\mathbb{R}^d$. The thought vector $\thought_u$ replaces the thought token's input
+embedding, and the LLM then decodes the next title under a catalogue constraint. MotiveRec changes how
+$\thought_u$ is formed: from motives.
+
+\subsection{Motive mining}\label{sec:mining}
+\paragraph{Purchase rationales.} For every \emph{training} interaction, an LLM (Qwen3-8B) reads the
+history, the purchased item and the user's review of it, and writes 1--2 short motive phrases (2--6
+words) and a one-sentence first-person rationale (``I bought this to \dots''). Reviews make the
+rationale grounded in what the buyer actually said rather than in item attributes alone.
+
+\paragraph{From phrases to prototypes.} Motive phrases are open-vocabulary and highly redundant
+(``60s rock collection'', ``classic 60's music''). We embed the distinct phrases (Qwen3-Embedding with a
+purchase-motive instruction), build a similarity graph and cluster it with Louvain community
+detection~\citep{louvain} (about 1{,}000 communities per domain). Near-duplicate communities (centroid cosine
+above a threshold) are merged, and communities supported by too few training rows are folded into their
+nearest neighbour. An LLM then names each community from its most frequent phrases with a canonical
+motive phrase, a first-person reason and a label, and flags communities that describe post-purchase
+complaints rather than motives; these are removed. This yields a vocabulary
+$\M=\{m_1,\dots,m_K\}$ of $K=859$ (CDs) and $K=881$ (Toys) named motive prototypes, each with text
+$x_k=$ ``\emph{motive}: \emph{reason}'' (e.g., ``Exploring 60s Music: I want to discover the sounds and
+styles of the 1960s music era.'').
+
+\paragraph{Motive labels.} Each phrase of each interaction is assigned to its nearest prototype, so each
+training interaction $j$ receives a label set $Y_j\subseteq\M$ of 0--2 motives (99.5\% of rows have at
+least one). Labels are used only as training targets of the retriever and are never model inputs.
+
+\subsection{Motive retrieval}\label{sec:retrieval}
+At test time the target item, and hence its review and rationale, is unknown. A retriever therefore
+predicts the motives of the next purchase from the history only. Its input concatenates
+(i) a SASRec~\citep{sasrec} embedding of the item sequence, (ii) a sentence embedding (gte-large) of the
+history titles, (iii) an \emph{item motive profile}, the average over history items of the motive
+distribution of all training purchases of that item (why people buy these items), and (iv) the motive
+distribution of the user's own earlier training interactions. An MLP scores all $K$ prototypes and is
+trained with a multi-positive softmax cross-entropy on $Y_j$, with early stopping on validation MRR.
+For training rows of the recommender, retrieved motives come from 5-fold cross-fitting grouped by user, so
+no row's motives are predicted by a retriever that saw its own label. MotiveRec uses the top-$k$
+prototypes $R_u=(m_{r_1},\dots,m_{r_k})$, $k=10$.
+% Retriever quality (test): Recall@10 0.42 (CDs) / 0.32 (Toys); MRR 0.32 / 0.29; popularity prior 0.38 / 0.26.
+
+\subsection{Motive integration}\label{sec:integration}
+The retrieved motives are turned into the latent thought by a history-conditioned selection: the
+user's history decides which candidate motives matter. We study two ways to represent a motive.
+
+\paragraph{Embedding integration (MotiveRec-E).} Each prototype text is encoded once by a frozen
+sentence encoder, $\mathbf{e}_k=\mathrm{Enc}(x_k)$, in the same space as the mined rationales. The motives
+are projected into the LLM space, $\mathbf{s}_j=W_p\,\mathbf{e}_{r_j}$, and attended by the history
+query with a residual path:
+\begin{equation}
+\thought_u = W_r\mathbf{h}_u + \sum_{j=1}^{k}\alpha_j\,W_v\mathbf{s}_j,\quad
+\alpha=\mathrm{softmax}_j\!\left(\frac{(W_q\mathbf{h}_u)^{\top}W_k\mathbf{s}_j}{\sqrt d}\right).
+\end{equation}
+The residual keeps the history signal, and the attention weights $\alpha$ give an interpretable
+distribution over the retrieved motives.
+
+\paragraph{Text integration (MotiveRec-T).} Instead of an external encoder, the LLM reads each motive in
+its own vocabulary, so that motives live in the same embedding space as the tokens the decoder consumes.
+A motive text $x_{r_j}$ is tokenised and embedded with the LLM's input embedding table,
+$X_j\in\mathbb{R}^{L\times d}$. A \emph{motive reader} compresses it in two levels, adopting the two-level
+attention pooling design of~\citet{inturec}:
+\begin{align}
+\mathbf{z}_j &= \mathrm{softmax}\!\left(\frac{\mathbf{q}_{j,L}^{\top}K_j^{\top}}{\sqrt d}\right)V_j,\quad
+[Q_j,K_j,V_j]=\mathrm{RoPE}(X_jW^{(1)}_{q,k,v}),\\
+\thought_u &= \mathrm{softmax}_j\!\left(\frac{(W^{(2)}_q\mathbf{h}_u)^{\top}W^{(2)}_k\mathbf{z}_j}{\sqrt d}\right)W^{(2)}_v\mathbf{z}_j.
+\end{align}
+The first level summarises each motive into one vector with its last-token query and rotary positions;
+the second level selects among the $k$ motive vectors according to the user's history. The only new
+parameters are the reader's projections; motive texts share the LLM's embeddings.
+
+\subsection{Motive-aligned training}\label{sec:training}
+The recommendation loss alone allows a collapsed latent (Section~\ref{sec:pilot}). We add an alignment
+term that asks the thought to identify the user's own purchase rationale $\rho_u$ (Section~\ref{sec:mining};
+available for training rows only) among $N$ random training rationales $\{\rho_n^-\}$:
+\begin{equation}
+\mathcal{L}_{\text{align}} = -\log\frac{\exp(\langle g(\thought_u),\, \phi(\rho_u)\rangle/\tau)}
+{\exp(\langle g(\thought_u),\phi(\rho_u)\rangle/\tau)+\sum_{n}\exp(\langle g(\thought_u),\phi(\rho^-_n)\rangle/\tau)},
+\end{equation}
+with cosine similarity $\langle\cdot,\cdot\rangle$ and temperature $\tau=0.05$. For MotiveRec-E, $\phi$ is the
+frozen sentence encoder and $g$ a linear head; for MotiveRec-T, $\phi$ is the first level of the motive
+reader applied to the rationale text and $g$ the identity, so no external embedding space is involved.
+The full objective is $\mathcal{L}=\mathcal{L}_{\text{NTP}}+\beta\,\mathcal{L}_{\text{align}}$ with
+$\beta=0.1$, where $\mathcal{L}_{\text{NTP}}$ is the next-token loss on the target title. Rationales are
+used only as training targets; at inference MotiveRec needs only the history and the retrieved motives.
+
+%=====================================================================
+\section{Experiments}\label{sec:exp}
+\paragraph{Datasets and protocol.} \todo{dataset statistics table; leave-last-out split; constrained beam
+decoding (10 beams); HR@$\{1,5,10\}$ and NDCG@$\{5,10\}$ on the full test set.}
+
+\paragraph{Baselines.} \todo{SASRec, GRU4Rec; BIGRec / D3; backbone with an empty thought slot
+(same training); LatentR$^3$ (SFT, RL); IntuRec.}
+
+\paragraph{Implementation.} Qwen2.5-1.5B backbone, learning rate $3\times10^{-4}$, effective batch 128,
+$k=10$ motives, $\beta=0.1$, $\tau=0.05$, $N$ negatives \todo{63 (T) / 1024 (E)}.
+
+\subsection{Main results}
+\todo{Table: MotiveRec-E / MotiveRec-T vs.\ baselines on both datasets.}
+
+\subsection{Does motive grounding prevent collapse?}
+\begin{table}[t]
+\centering\small
+\caption{Thought geometry with motive grounding (MotiveRec-T) vs.\ Table~\ref{tab:collapse}.}
+\label{tab:geometry}
+\begin{tabular}{llccc}
+\toprule
+Data & Model & Eff.\ rank & PC1 var. & Pair cos \\
+\midrule
+\multirow{3}{*}{CDs}  & LatentR$^3$ (RL) & 1.55 & 0.905 & 0.995 \\
+                      & IntuRec          & 1.02 & 0.998 & 0.952 \\
+                      & MotiveRec-T      & 8.78 & 0.353 & 0.687 \\
+\midrule
+\multirow{3}{*}{Toys} & LatentR$^3$ (RL) & 2.30 & 0.607 & 1.000 \\
+                      & IntuRec          & 1.05 & 0.992 & 0.996 \\
+                      & MotiveRec-T      & 15.53 & 0.200 & 0.540 \\
+\bottomrule
+\end{tabular}
+\end{table}
+MotiveRec's thoughts differ between users (pair cosine 0.54--0.69, close to the diversity of the history
+query itself) and spread over many directions (PC1 0.20--0.35). They are also organised by
+behaviour: on Toys, the centred cosine between a test thought and the training thoughts of the same user
+is 0.44 and of training rows sharing a motive is 0.10, against 0.006 for random pairs.
+\todo{MotiveRec-E geometry; ablation $\beta=0$ to separate the effect of motive input and alignment.}
+
+\subsection{Ablations and analysis}
+\todo{(i) number of motives $k$; (ii) $\beta=0$; (iii) random motives instead of retrieved ones;
+(iv) MotiveRec-E vs.\ -T; (v) retriever quality vs.\ accuracy; (vi) case studies with attention weights
+over retrieved motives.}
+
+%=====================================================================
+\section{Related work}
+\paragraph{LLM-based recommendation.} \todo{TALLRec, BIGRec, D3, LC-Rec, \dots}
+\paragraph{Reasoning for recommendation.} Explicit rationales \todo{cite}; latent reasoning:
+LatentR$^3$~\citep{r3} learns a content-free latent and refines it with RL; IntuRec~\citep{inturec}
+conditions the latent on retrieved candidate items, i.e., on \emph{what} the user may buy. MotiveRec
+conditions it on \emph{why} the user buys, with an explicit, mined and interpretable motive vocabulary.
+\paragraph{Intent- and motive-aware recommendation.} \todo{latent intent models (ICLRec, DSSRec), review-based
+user modelling; difference: open-vocabulary, LLM-mined, named motives used to ground LLM reasoning.}
+\paragraph{Representation collapse.} \todo{dimensional collapse in contrastive / recommendation
+embeddings; effective rank.}
+
+\section{Conclusion}
+\todo{}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+\end{document}

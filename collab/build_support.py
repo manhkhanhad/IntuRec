@@ -131,6 +131,8 @@ class SasrecEncoder:
         self.to_cornac = np.full(n_items, -1, dtype=np.int64)
         for item, asin in asin_of.items():
             idx = model.iid_map.get(asin)
+            if idx is None:   # Steam/Movielens: integer asins in the CSVs, string keys in the SASRec map
+                idx = model.iid_map.get(str(asin))
             if idx is not None and idx < model.num_items:
                 self.to_cornac[item] = idx
         known = self.to_cornac >= 0
